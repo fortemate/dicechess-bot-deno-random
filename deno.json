@@ -15,12 +15,5 @@
     "lineWidth": 110,
     "singleQuote": true
   },
-  "lock": true,
-  "deploy": {
-    "runtime": {
-      "type": "dynamic",
-      "entrypoint": "main.ts",
-      "memory_limit": "512MiB"
-    }
-  }
+  "lock": true
 }
