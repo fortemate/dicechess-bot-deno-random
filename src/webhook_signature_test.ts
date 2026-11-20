@@ -12,20 +12,19 @@ Deno.test('sign matches the independent HMAC-SHA256 vector', async () => {
 });
 
 Deno.test('verification preserves the inclusive replay boundary and numeric timestamp parsing', async () => {
-  for (
-    const [now, timestamp] of [
-      [TIMESTAMP, String(TIMESTAMP)],
-      [TIMESTAMP + 300, String(TIMESTAMP)],
-      [TIMESTAMP - 300, String(TIMESTAMP)],
-      [TIMESTAMP, ' 1700000000.0 '],
-    ] as const
-  ) {
+  const cases = [
+    [TIMESTAMP, String(TIMESTAMP)],
+    [TIMESTAMP + 300, String(TIMESTAMP)],
+    [TIMESTAMP - 300, String(TIMESTAMP)],
+    [TIMESTAMP, ' 1700000000.0 '],
+  ] as const;
+  await Promise.all(cases.map(async ([now, timestamp]) => {
     assertEquals(await verifySignature(FIXTURE_KEY, timestamp, BODY, DIGEST, now), true);
-  }
+  }));
 });
 
 Deno.test('every changed ASCII position and surrogate signature is rejected', async () => {
-  let cases = 0;
+  const cases: { signature: string; position: number }[] = [];
   for (let i = 0; i < DIGEST.length; i++) {
     const rejected = [
       DIGEST.slice(0, i) + (DIGEST[i] === '0' ? '1' : '0') + DIGEST.slice(i + 1),
@@ -35,49 +34,47 @@ Deno.test('every changed ASCII position and surrogate signature is rejected', as
     if (i + 1 < DIGEST.length) {
       rejected.push(DIGEST.slice(0, i) + '😀' + DIGEST.slice(i + 2));
     }
-    for (const signature of rejected) {
-      assertEquals(
-        await verifySignature(FIXTURE_KEY, String(TIMESTAMP), BODY, signature, TIMESTAMP),
-        false,
-        `changed signature at UTF-16 position ${i}`,
-      );
-      cases++;
-    }
+    for (const signature of rejected) cases.push({ signature, position: i });
   }
-  assertEquals(cases, 255);
+  assertEquals(cases.length, 255);
+  await Promise.all(cases.map(async ({ signature, position }) => {
+    assertEquals(
+      await verifySignature(FIXTURE_KEY, String(TIMESTAMP), BODY, signature, TIMESTAMP),
+      false,
+      `changed signature at UTF-16 position ${position}`,
+    );
+  }));
 });
 
 Deno.test('signature shape, case, whitespace and length remain strict', async () => {
-  for (
-    const signature of [
-      undefined,
-      '',
-      'sha256=' + DIGEST,
-      ' ' + DIGEST,
-      DIGEST + ' ',
-      DIGEST.toUpperCase(),
-      DIGEST.slice(1),
-      DIGEST + '0',
-    ]
-  ) {
+  const cases = [
+    undefined,
+    '',
+    'sha256=' + DIGEST,
+    ' ' + DIGEST,
+    DIGEST + ' ',
+    DIGEST.toUpperCase(),
+    DIGEST.slice(1),
+    DIGEST + '0',
+  ];
+  await Promise.all(cases.map(async (signature) => {
     assertEquals(
       await verifySignature(FIXTURE_KEY, String(TIMESTAMP), BODY, signature, TIMESTAMP),
       false,
     );
-  }
+  }));
 });
 
 Deno.test('missing, nonfinite and out-of-window timestamps are rejected', async () => {
-  for (
-    const [now, timestamp] of [
-      [TIMESTAMP, undefined],
-      [TIMESTAMP, 'Infinity'],
-      [TIMESTAMP + 301, String(TIMESTAMP)],
-      [TIMESTAMP - 301, String(TIMESTAMP)],
-    ] as const
-  ) {
+  const cases = [
+    [TIMESTAMP, undefined],
+    [TIMESTAMP, 'Infinity'],
+    [TIMESTAMP + 301, String(TIMESTAMP)],
+    [TIMESTAMP - 301, String(TIMESTAMP)],
+  ] as const;
+  await Promise.all(cases.map(async ([now, timestamp]) => {
     assertEquals(await verifySignature(FIXTURE_KEY, timestamp, BODY, DIGEST, now), false);
-  }
+  }));
 });
 
 Deno.test('delivery rejects a same-length Unicode signature before calling the strategy', async () => {
@@ -124,19 +121,18 @@ Deno.test('signatures bind exact UTF-8 body content', async () => {
 });
 
 Deno.test('malformed JSON and envelopes without a string type retain their error responses', async () => {
-  for (
-    const [body, error] of [
-      ['{', 'malformed JSON'],
-      ['null', 'missing "type"'],
-      ['{}', 'missing "type"'],
-      ['{"type":1}', 'missing "type"'],
-    ]
-  ) {
+  const cases = [
+    ['{', 'malformed JSON'],
+    ['null', 'missing "type"'],
+    ['{}', 'missing "type"'],
+    ['{"type":1}', 'missing "type"'],
+  ];
+  await Promise.all(cases.map(async ([body, error]) => {
     assertEquals(await handleDelivery({}, body, FIXTURE_KEY, () => [], TIMESTAMP), {
       status: 400,
       body: { error },
     });
-  }
+  }));
 });
 
 Deno.test('unknown delivery types are rejected before signature verification', async () => {
